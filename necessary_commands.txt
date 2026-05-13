@@ -1,0 +1,20 @@
+1. Find the Port Connected
+`lerobot-find-port`
+
+2. Set Permission to the port
+
+`sudo chmod 666 /dev/ttyACM0`
+`sudo chmod 666 /dev/ttyACM1`
+
+3. Find Camera
+
+`lerobot-find-cameras opencv`
+
+4. Calibrate Follower and the leader
+
+`lerobot-calibrate     --robot.type=so101_follower     --robot.port=/dev/ttyACM0  --robot.id=follower_arm`
+
+`lerobot-calibrate     --teleop.type=so101_leader     --teleop.port=/dev/ttyACM1     --teleop.id=leader_arm`
+
+5. Tele Operate
+`lerobot-teleoperate     --robot.type=so101_follower     --robot.port=/dev/ttyACM0     --robot.id=follower_arm     --teleop.type=so101_leader     --teleop.port=/dev/ttyACM1     --teleop.id=leader_arm`
