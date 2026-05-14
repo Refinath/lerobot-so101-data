@@ -15,6 +15,8 @@
 # limitations under the License.
 
 
+import time
+
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.common.control_utils import init_keyboard_listener
 from lerobot.datasets import LeRobotDataset, aggregate_pipeline_dataset_features, create_initial_features
@@ -39,10 +41,18 @@ from lerobot.utils.feature_utils import combine_feature_dicts
 from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
 
+try:
+    from pynput import keyboard
+except ModuleNotFoundError:
+    keyboard = None
+
+
 NUM_EPISODES = 2
 FPS = 30
 EPISODE_TIME_SEC = 60
 RESET_TIME_SEC = 30
+START_EPISODE_KEY = "space"
+
 TASK_DESCRIPTION = "My task description" # Use correct task description
 HF_REPO_ID = "vla/spatial_dataset" # Use correct repo ID
 
@@ -51,6 +61,40 @@ LEADER_PORT = "/dev/ttyACM0" # Use correct leader port
 FOLLOWER_ID = "follower_arm" # Use correct follower ID
 LEADER_ID = "leader_arm" # Use correct leader ID
 WRIST_CAMERA_PATH ="/dev/video0" # Use correct camera name
+
+
+def wait_for_episode_start(events, episode_idx):
+    """Block until the operator starts the next episode or stops collection."""
+    events["start_episode"] = False
+    log_say(
+        f"Press {START_EPISODE_KEY} to start episode {episode_idx + 1}, "
+        "or Esc to stop recording"
+    )
+
+    if keyboard is None:
+        input(f"Press Enter to start episode {episode_idx + 1}...")
+        events["start_episode"] = True
+        return not events["stop_recording"]
+
+    def on_press(key):
+        if key == keyboard.Key.space:
+            events["start_episode"] = True
+            return False
+        if key == keyboard.Key.esc:
+            events["stop_recording"] = True
+            events["exit_early"] = True
+            return False
+        return None
+
+    start_listener = keyboard.Listener(on_press=on_press)
+    start_listener.start()
+    try:
+        while not events["start_episode"] and not events["stop_recording"]:
+            time.sleep(0.05)
+    finally:
+        start_listener.stop()
+
+    return events["start_episode"] and not events["stop_recording"]
 
 
 def main():
@@ -157,6 +201,10 @@ def main():
         print("Starting record loop...")
         episode_idx = 0
         while episode_idx < NUM_EPISODES and not events["stop_recording"]:
+            if not wait_for_episode_start(events, episode_idx):
+                break
+
+            events["exit_early"] = False
             log_say(f"Recording episode {episode_idx + 1} of {NUM_EPISODES}")
 
             # Main record loop
@@ -208,7 +256,8 @@ def main():
         log_say("Stop recording")
         leader.disconnect()
         follower.disconnect()
-        listener.stop()
+        if listener is not None:
+            listener.stop()
 
         dataset.finalize()
         # dataset.push_to_hub()
