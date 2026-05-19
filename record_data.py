@@ -36,7 +36,7 @@ Common commands:
 Keyboard controls while running:
     Space: start the next episode.
     Enter: end the current episode/reset loop early.
-    Left arrow: discard the current episode and record it again.
+    Backspace: discard the current episode and record it again.
     Esc: stop the whole recording session.
 """
 
@@ -78,7 +78,7 @@ from lerobot.utils.utils import log_say
 from lerobot.utils.visualization_utils import init_rerun
 
 
-NUM_EPISODES = 2
+NUM_EPISODES = 50
 FPS = 30
 EPISODE_TIME_SEC = 60
 RESET_TIME_SEC = 30
@@ -87,7 +87,7 @@ RESET_TIME_SEC = 30
 START_EPISODE_KEY = "space"
 STOP_RECORDING_KEY = "esc"
 END_LOOP_KEY = "enter"
-RERECORD_EPISODE_KEY = "left arrow"
+RERECORD_EPISODE_KEY = "backspace"
 
 HF_REPO_NAMESPACE = "dataset" # Use correct repo namespace
 
@@ -95,9 +95,9 @@ FOLLOWER_PORT = "/dev/ttyACM0" # Use correct follower port
 LEADER_PORT = "/dev/ttyACM1" # Use correct leader port
 FOLLOWER_ID = "follower_arm" # Use correct follower ID
 LEADER_ID = "leader_arm" # Use correct leader ID
-WRIST_CAMERA_PATH ="/dev/video8" # Use correct camera name
-AGENT_CAMERA_PATH ="/dev/video10" # Use correct camera name
-AGENT_DEPTH_CAMERA_PATH ="/dev/video5" # Use correct camera name
+WRIST_CAMERA_PATH ="/dev/video2" # Use correct camera name
+AGENT_CAMERA_PATH ="/dev/video8" # Use correct camera name
+AGENT_DEPTH_CAMERA_PATH ="/dev/video6" # Use correct camera name
 
 
 dataset_root = Path(os.environ["HF_LEROBOT_HOME"])
@@ -143,8 +143,8 @@ class TerminalKeyboardListener:
         elif key in ("\r", "\n"):
             print("Enter key pressed. Exiting loop...")
             self.events["exit_early"] = True
-        elif key == "\x1b[D":
-            print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
+        elif key in ("\x7f", "\b"):
+            print("Backspace key pressed. Exiting loop and rerecord the last episode...")
             self.events["rerecord_episode"] = True
             self.events["exit_early"] = True
         elif key == "\x1b":
@@ -317,7 +317,7 @@ def main():
     print(f"Dataset path: {dataset_path}")
     print(
         "Controls: space=start episode, enter=end current loop, "
-        "left arrow=rerecord episode, esc=stop recording"
+        "backspace=rerecord episode, esc=stop recording"
     )
 
     # Create the robot and teleoperator configurations
@@ -450,10 +450,23 @@ def main():
                 display_data=True,
             )
 
+            if events["rerecord_episode"]:
+                log_say("Re-recording episode")
+                events["rerecord_episode"] = False
+                events["exit_early"] = False
+                dataset.clear_episode_buffer()
+                continue
+
+            if dataset.has_pending_frames():
+                log_say("Saving episode")
+                dataset.save_episode()
+                episode_idx += 1
+            else:
+                print("No frames were recorded for this episode; skipping save.")
+                continue
+
             # Reset the environment if not stopping or re-recording
-            if not events["stop_recording"] and (
-                episode_idx < NUM_EPISODES - 1 or events["rerecord_episode"]
-            ):
+            if not events["stop_recording"] and episode_idx < NUM_EPISODES:
                 log_say("Reset the environment")
                 record_loop(
                     robot=follower,
@@ -467,27 +480,21 @@ def main():
                     single_task=task_prompt,
                     display_data=True,
                 )
-
-            if events["rerecord_episode"]:
-                log_say("Re-recording episode")
-                events["rerecord_episode"] = False
                 events["exit_early"] = False
-                dataset.clear_episode_buffer()
-                continue
-
-            # Save episode
-            dataset.save_episode()
-            episode_idx += 1
+                events["rerecord_episode"] = False
 
     finally:
         # Clean up
         log_say("Stop recording")
-        leader.disconnect()
-        follower.disconnect()
-        if listener is not None:
-            listener.stop()
-
+        # Finalize before touching hardware teardown. If a USB/SDK disconnect
+        # aborts the process, the parquet and metadata files are already sealed.
         dataset.finalize()
+        try:
+            leader.disconnect()
+            follower.disconnect()
+        finally:
+            if listener is not None:
+                listener.stop()
         # dataset.push_to_hub()
 
 

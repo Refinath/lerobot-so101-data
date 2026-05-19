@@ -117,7 +117,7 @@ Note: `--save-images` only applies when creating a new dataset. When using
 | --- | --- |
 | Space | Start the next episode. |
 | Enter | End the current episode or reset loop early. |
-| Left arrow | Discard the current episode and record it again. |
+| Backspace | Discard the current episode and record it again. |
 | Esc | Stop the whole recording session. |
 
 The script connects the robot first, then waits for Space before recording the
