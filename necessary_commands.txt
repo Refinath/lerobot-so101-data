@@ -10,6 +10,9 @@
 
 `lerobot-find-cameras opencv`
 
+- check camera feed 
+`cheese -d /dev/video6`
+
 4. Calibrate Follower and the leader
 
 `lerobot-calibrate     --robot.type=so101_follower     --robot.port=/dev/ttyACM0  --robot.id=follower_arm`

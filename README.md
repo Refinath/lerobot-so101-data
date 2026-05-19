@@ -19,8 +19,6 @@ LeRobot dataset folder.
 
 ```text
 record_data.py              Main recording script.
-dataset/                    Prompt-specific LeRobot datasets.
-calibration/                Robot and teleoperator calibration files.
 scripts/validate_dataset.py Dataset validation helper.
 scripts/replay_dataset.py   Dataset replay helper.
 SO101/                      URDF, MuJoCo scene, and robot assets.
@@ -39,8 +37,8 @@ dataset/place-black-bowl-in-front-of-the-drawer/
 Run commands from the repo root:
 
 ```bash
-cd /home/refinath/lerobot-so101-data
-source /home/refinath/envs/lerobot/bin/activate
+cd lerobot-so101-data
+activate your env
 ```
 
 Check the recording script help:
@@ -60,11 +58,8 @@ Before recording, confirm the hardware constants at the top of `record_data.py`:
 - `EPISODE_TIME_SEC`
 - `RESET_TIME_SEC`
 
-For USB serial ports, prefer stable paths from:
+For useful commands refer lerobot-so101-data/necessary_commands.txt
 
-```bash
-ls -l /dev/serial/by-id/
-```
 
 ## Recording Data
 
