@@ -7,8 +7,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-DATASET_REPO_ID="${DATASET_REPO_ID:-dataset/spatial_dataset}"
-DATASET_ROOT="${DATASET_ROOT:-$ROOT_DIR/dataset/spatial_dataset}"
+DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/so101_bowl_placement}"
+DATASET_ROOT="${DATASET_ROOT:-$ROOT_DIR/Refinath/so101_bowl_placement}"
 HF_LEROBOT_HOME="${HF_LEROBOT_HOME:-$ROOT_DIR}"
 
 BASE_POLICY="${BASE_POLICY:-lerobot/pi05_base}"
@@ -26,10 +26,10 @@ LORA_R="${LORA_R:-64}"
 WANDB_ENABLE="${WANDB_ENABLE:-false}"
 PUSH_TO_HUB="${PUSH_TO_HUB:-false}"
 
-if [[ -n "${LEROBOT_PATH:-}" ]]; then
-  export PYTHONPATH="$LEROBOT_PATH/src:$LEROBOT_PATH:${PYTHONPATH:-}"
-  export PATH="$LEROBOT_PATH/.venv/bin:$PATH"
-fi
+#if [[ -n "${LEROBOT_PATH:-}" ]]; then
+#  export PYTHONPATH="$LEROBOT_PATH/src:$LEROBOT_PATH:${PYTHONPATH:-}"
+#  export PATH="$LEROBOT_PATH/.venv/bin:$PATH"
+#fi
 
 if ! command -v lerobot-train >/dev/null 2>&1; then
   echo "lerobot-train was not found."
