@@ -10,6 +10,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/so101_bowl_placement}"
 DATASET_ROOT="${DATASET_ROOT:-$ROOT_DIR/Refinath/so101_bowl_placement}"
 HF_LEROBOT_HOME="${HF_LEROBOT_HOME:-$ROOT_DIR}"
+CLONE_DATASET="${CLONE_DATASET:-true}"
+UPDATE_DATASET="${UPDATE_DATASET:-false}"
+DATASET_CLONE_URL="${DATASET_CLONE_URL:-https://huggingface.co/datasets/$DATASET_REPO_ID}"
 
 BASE_POLICY="${BASE_POLICY:-lerobot/pi05_base}"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/outputs/train/pi05_lora_spatial}"
@@ -38,6 +41,50 @@ if ! command -v lerobot-train >/dev/null 2>&1; then
   echo "Or set LEROBOT_PATH=/path/to/lerobot if you use a local checkout."
   exit 1
 fi
+
+clone_dataset() {
+  if [[ -d "$DATASET_ROOT" ]]; then
+    if [[ "$UPDATE_DATASET" == "true" && -d "$DATASET_ROOT/.git" ]]; then
+      echo "Updating dataset at $DATASET_ROOT"
+      git -C "$DATASET_ROOT" pull --ff-only
+      if command -v git-lfs >/dev/null 2>&1; then
+        git -C "$DATASET_ROOT" lfs pull
+      fi
+    fi
+    return
+  fi
+
+  if [[ "$CLONE_DATASET" != "true" ]]; then
+    return
+  fi
+
+  mkdir -p "$(dirname "$DATASET_ROOT")"
+
+  if command -v git >/dev/null 2>&1; then
+    echo "Cloning dataset from $DATASET_CLONE_URL to $DATASET_ROOT"
+    git clone "$DATASET_CLONE_URL" "$DATASET_ROOT"
+    if command -v git-lfs >/dev/null 2>&1; then
+      git -C "$DATASET_ROOT" lfs pull
+    else
+      echo "Warning: git-lfs is not installed. Large dataset files may not be downloaded."
+    fi
+    return
+  fi
+
+  if command -v huggingface-cli >/dev/null 2>&1; then
+    echo "Downloading dataset $DATASET_REPO_ID to $DATASET_ROOT"
+    huggingface-cli download "$DATASET_REPO_ID" \
+      --repo-type dataset \
+      --local-dir "$DATASET_ROOT" \
+      --local-dir-use-symlinks False
+    return
+  fi
+
+  echo "Could not clone dataset: neither git nor huggingface-cli was found."
+  exit 1
+}
+
+clone_dataset
 
 if [[ ! -d "$DATASET_ROOT" ]]; then
   echo "Dataset root does not exist: $DATASET_ROOT"
@@ -76,6 +123,7 @@ fi
 
 echo "Starting Pi0.5 LoRA fine-tuning"
 echo "  dataset: $DATASET_REPO_ID ($DATASET_ROOT)"
+echo "  clone:   $CLONE_DATASET"
 echo "  base:    $BASE_POLICY"
 echo "  output:  $OUTPUT_DIR"
 echo "  device:  $DEVICE"
