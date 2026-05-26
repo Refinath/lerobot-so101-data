@@ -7,12 +7,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/so101_bowl_placement}"
+DATASET_NAME=so101_bowl_placement
+DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/$DATASET_NAME}"
 DATASET_ROOT="${DATASET_ROOT:-}"
+DATASET_REVISION="${DATASET_REVISION:-main}"
+DATASET_STREAMING="${DATASET_STREAMING:-false}"
 HF_LEROBOT_HOME="${HF_LEROBOT_HOME:-$ROOT_DIR}"
 
 BASE_POLICY="${BASE_POLICY:-lerobot/pi05_base}"
-OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/outputs/train/pi05_lora_spatial}"
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/outputs/train/pi05_$DATASET_NAME}"
 JOB_NAME="${JOB_NAME:-pi05_lora_spatial}"
 POLICY_REPO_ID="${POLICY_REPO_ID:-}"
 
@@ -43,6 +46,8 @@ export HF_LEROBOT_HOME
 
 args=(
   --dataset.repo_id="$DATASET_REPO_ID"
+  --dataset.revision="$DATASET_REVISION"
+  --dataset.streaming="$DATASET_STREAMING"
   --policy.type=pi05
   --policy.pretrained_path="$BASE_POLICY"
   --policy.compile_model=true
@@ -78,6 +83,8 @@ fi
 
 echo "Starting Pi0.5 LoRA fine-tuning"
 echo "  dataset: $DATASET_REPO_ID"
+echo "  revision: $DATASET_REVISION"
+echo "  streaming: $DATASET_STREAMING"
 if [[ -n "$DATASET_ROOT" ]]; then
   echo "  root:    $DATASET_ROOT"
 else
