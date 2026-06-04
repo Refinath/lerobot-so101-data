@@ -13,11 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Record SO100 demonstrations into prompt-specific LeRobot datasets.
+"""Record SO101 demonstrations into prompt-specific LeRobot datasets.
 
 Purpose:
-    Use this script to collect teleoperated demonstrations from a SO100 leader
-    arm to a SO100 follower arm. Each prompt/instruction is written to its own
+    Use this script to collect teleoperated demonstrations from a SO101 leader
+    arm to a SO101 follower arm. Each prompt/instruction is written to its own
     dataset folder so data stays grouped by task.
 
 Common commands:
@@ -216,7 +216,7 @@ def slugify_prompt(prompt):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Record SO100 teleoperation data into a prompt-specific LeRobot dataset.",
+        description="Record SO101 teleoperation data into a prompt-specific LeRobot dataset.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Dataset behavior:

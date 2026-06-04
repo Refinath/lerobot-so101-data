@@ -6,10 +6,9 @@ dataset through ``LeRobotDataset``. That exercises LeRobot's metadata, parquet,
 timestamp, and video-decoding checks. It then adds a few practical audits that
 are useful before training on real robot data.
 """
-import os
-os.environ["HF_LEROBOT_HOME"] = "/Users/refinathsn/Work/lerobot-so101-data"
-
 from __future__ import annotations
+
+import os
 
 import argparse
 import json

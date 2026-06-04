@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+
 
 set -euo pipefail
 
@@ -23,10 +23,9 @@ set -euo pipefail
 # Run interactively for debugging:
 #   bash scripts/train_pi05_lora.sh
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="/home/r84368868/lerobot-so101-data"
 cd "$ROOT_DIR"
 
-mkdir -p logs/slurm
 
 DATASET_NAME=so101_bowl_placement
 DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/$DATASET_NAME}"
@@ -52,10 +51,13 @@ LORA_R="${LORA_R:-64}"
 WANDB_ENABLE="${WANDB_ENABLE:-false}"
 PUSH_TO_HUB="${PUSH_TO_HUB:-false}"
 
+# Set HF_TOKEN in your environment before running, e.g.:
+#   export HF_TOKEN=hf_...
+: "${HF_TOKEN:?HF_TOKEN must be set in the environment}"
 export HF_LEROBOT_HOME HF_HOME HF_DATASETS_CACHE
 
-export PATH="/home/refinath/miniconda3/bin:$PATH"
-source /home/refinath/miniconda3/bin/activate /home/refinath/envs/lerobot/
+export PATH="/home/r84368868/miniconda3/bin:$PATH"
+source /home/r84368868/miniconda3/bin/activate /home/r84368868/envs/lerobot/
 export WANDB_MODE=offline
 
 

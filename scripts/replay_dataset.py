@@ -8,8 +8,8 @@ viewer.
 """
 
 from __future__ import annotations
+
 import os
-os.environ["HF_LEROBOT_HOME"] = "/Users/refinathsn/Work/lerobot-so101-data"
 
 
 import argparse
