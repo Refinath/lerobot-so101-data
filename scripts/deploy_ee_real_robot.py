@@ -72,6 +72,7 @@ def main():
     from lerobot.rollout.inference import SyncInferenceConfig
     from lerobot.rollout.strategies import BaseStrategy
     from lerobot.types import RobotAction, RobotObservation
+    from lerobot.utils.constants import ACTION
     from lerobot.utils.process import ProcessSignalHandler
     from lerobot.utils.utils import init_logging
 
@@ -118,6 +119,19 @@ def main():
         to_output=transition_to_observation,
     )
 
+    # Declares the policy's action space (EE pose) to the rollout context, mirroring
+    # record_data.py's `leader_joints_to_ee`. Without this, build_rollout_context falls
+    # back to an identity teleop_action_processor over raw joint names, and a feature-
+    # transform bug in ForwardKinematicsJointsToEE (it injects `ee.*` into the ACTION
+    # feature dict even when only computing observation features) corrupts
+    # dataset_features["action"]["names"] into a 13-entry mix of joint + EE names —
+    # causing `make_robot_action` to index past the policy's 7-element action tensor.
+    teleop_action_processor = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
+        steps=[ForwardKinematicsJointsToEE(kinematics=kinematics, motor_names=motor_names)],
+        to_transition=robot_action_observation_to_transition,
+        to_output=transition_to_robot_action,
+    )
+
     # EE action → joint action (what the motors accept).
     robot_action_processor = RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction](
         steps=[
@@ -158,9 +172,21 @@ def main():
     ctx = build_rollout_context(
         cfg,
         signal_handler.shutdown_event,
+        teleop_action_processor=teleop_action_processor,
         robot_action_processor=robot_action_processor,
         robot_observation_processor=robot_observation_processor,
     )
+
+    # Work around a library bug in build_rollout_context: it resolves
+    # `ordered_action_keys` against the robot's raw joint names (since this
+    # policy has no `action_feature_names` set), but `make_robot_action` keys
+    # its output dict by `dataset_features["action"]["names"]` — which, for an
+    # EE-space policy, is the EE pose names (ee.x, ee.y, ...), not joint names.
+    # That mismatch raises `KeyError: 'shoulder_pan.pos'` inside get_action().
+    # Realign both copies of the ordering to the actual EE action-feature names.
+    correct_action_keys = list(ctx.data.dataset_features[ACTION]["names"])
+    ctx.data.ordered_action_keys[:] = correct_action_keys
+    ctx.policy.inference._ordered_action_keys = correct_action_keys
 
     strategy = BaseStrategy(cfg.strategy)
     try:
