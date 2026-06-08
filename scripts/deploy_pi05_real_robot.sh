@@ -23,7 +23,6 @@ FOLLOWER_ID="${FOLLOWER_ID:-follower_arm}"
 
 WRIST_CAMERA_PATH="${WRIST_CAMERA_PATH:-/dev/video2}"
 AGENT_CAMERA_PATH="${AGENT_CAMERA_PATH:-/dev/video8}"
-AGENT_DEPTH_CAMERA_PATH="${AGENT_DEPTH_CAMERA_PATH:-/dev/video6}"
 
 echo "Deploying Pi0.5 policy via deploy_ee_real_robot.py"
 echo "  python:     $(command -v python || true)"
@@ -40,5 +39,4 @@ exec python "$ROOT_DIR/scripts/deploy_ee_real_robot.py" \
   --follower-id="$FOLLOWER_ID" \
   --wrist-cam="$WRIST_CAMERA_PATH" \
   --agent-cam="$AGENT_CAMERA_PATH" \
-  --agent-depth-cam="$AGENT_DEPTH_CAMERA_PATH" \
   "$@"

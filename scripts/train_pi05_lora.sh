@@ -23,15 +23,21 @@ set -euo pipefail
 # Run interactively for debugging:
 #   bash scripts/train_pi05_lora.sh
 
-ROOT_DIR="/home/r84368868/lerobot-so101-data"
+ROOT_DIR="${ROOT_DIR:-/home/r84368868/lerobot-so101-data}"
 cd "$ROOT_DIR"
 
 
 DATASET_NAME=so101_bowl_placement
 DATASET_REPO_ID="${DATASET_REPO_ID:-Refinath/$DATASET_NAME}"
+# RAW_DATASET_ROOT: path to the collected dataset (before preprocessing).
+# If set, the script preprocesses it (unwrap ee.wy, drop depth cam) and trains
+# on the result. Set SKIP_PREPROCESS=1 to reuse an existing preprocessed copy.
+RAW_DATASET_ROOT="${RAW_DATASET_ROOT:-$ROOT_DIR/dataset/pick-the-black-bowl-from-the-top-of-the-drawer-and-place-it-on-the-table}"
+PREPROCESSED_ROOT="${PREPROCESSED_ROOT:-${RAW_DATASET_ROOT}-preprocessed}"
 DATASET_ROOT="${DATASET_ROOT:-}"
 DATASET_REVISION="${DATASET_REVISION:-main}"
 DATASET_STREAMING="${DATASET_STREAMING:-false}"
+SKIP_PREPROCESS="${SKIP_PREPROCESS:-0}"
 HF_LEROBOT_HOME="${HF_LEROBOT_HOME:-$ROOT_DIR}"
 HF_HOME="${HF_HOME:-$ROOT_DIR/.cache/huggingface}"
 HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
@@ -51,15 +57,33 @@ LORA_R="${LORA_R:-64}"
 WANDB_ENABLE="${WANDB_ENABLE:-false}"
 PUSH_TO_HUB="${PUSH_TO_HUB:-false}"
 
-# Set HF_TOKEN in your environment before running, e.g.:
-#   export HF_TOKEN=hf_...
-: "${HF_TOKEN:?HF_TOKEN must be set in the environment}"
+# HF_TOKEN is needed to download models/datasets from HuggingFace.
+# When running fully local (preprocessed dataset + cached base model) it can be left unset.
+if [[ -z "${HF_TOKEN:-}" ]]; then
+  echo "WARNING: HF_TOKEN is not set. Continuing with local cache only."
+fi
+export HF_TOKEN="${HF_TOKEN:-}"
 export HF_LEROBOT_HOME HF_HOME HF_DATASETS_CACHE
 
-export PATH="/home/r84368868/miniconda3/bin:$PATH"
-source /home/r84368868/miniconda3/bin/activate /home/r84368868/envs/lerobot/
+CONDA_BIN_DIR="${CONDA_BIN_DIR:-/home/r84368868/miniconda3/bin}"
+CONDA_ENV_PATH="${CONDA_ENV_PATH:-/home/r84368868/envs/lerobot/}"
+source "$CONDA_BIN_DIR/../etc/profile.d/conda.sh"
+conda activate "$CONDA_ENV_PATH"
+# Force the env's bin/ to the front of PATH — conda activate's PATH ordering
+# is unreliable across compute nodes (base conda's bin can shadow it, causing
+# `python` to resolve without torch installed). This guarantees correctness.
+export PATH="${CONDA_ENV_PATH%/}/bin:$PATH"
 export WANDB_MODE=offline
 
+# ── Fast CUDA check — exit code 2 signals broken GPU node to the monitor script
+python - <<'PYEOF'
+import torch, sys
+if not torch.cuda.is_available():
+    print(f"ERROR: CUDA not available on {__import__('socket').gethostname()} — driver too old or GPU absent.")
+    sys.exit(2)
+print(f"CUDA OK: {torch.cuda.get_device_name(0)} on {__import__('socket').gethostname()}")
+PYEOF
+if [[ $? -ne 0 ]]; then exit 2; fi
 
 if ! command -v lerobot-train >/dev/null 2>&1; then
   echo "lerobot-train was not found."
@@ -67,6 +91,20 @@ if ! command -v lerobot-train >/dev/null 2>&1; then
   echo '  pip install "lerobot[pi,peft]@git+https://github.com/huggingface/lerobot.git"'
   echo "Or set LEROBOT_PATH=/path/to/lerobot if you use a local checkout."
   exit 1
+fi
+
+# ── Preprocessing: unwrap ee.wy + drop depth camera ──────────────────────────
+if [[ -n "$RAW_DATASET_ROOT" && -d "$RAW_DATASET_ROOT" ]]; then
+  if [[ "$SKIP_PREPROCESS" == "1" && -d "$PREPROCESSED_ROOT" ]]; then
+    echo "Skipping preprocessing (SKIP_PREPROCESS=1), using: $PREPROCESSED_ROOT"
+  else
+    echo "Preprocessing dataset (unwrap ee.wy, drop depth camera)..."
+    python "$ROOT_DIR/scripts/preprocess_dataset.py" \
+      --input-dataset  "$RAW_DATASET_ROOT" \
+      --output-dataset "$PREPROCESSED_ROOT" \
+      --force
+  fi
+  DATASET_ROOT="$PREPROCESSED_ROOT"
 fi
 
 args=(

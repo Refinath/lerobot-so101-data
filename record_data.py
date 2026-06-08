@@ -250,6 +250,12 @@ Examples:
         action="store_true",
         help="For new datasets, store camera observations as PNG frames instead of MP4 videos.",
     )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Open the Rerun viewer window for live camera/action visualization. "
+             "Disabled by default to avoid CPU overhead during collection.",
+    )
     dataset_mode = parser.add_mutually_exclusive_group()
 
     dataset_mode.add_argument(
@@ -413,9 +419,10 @@ def main():
     leader.connect()
     follower.connect()
 
-    # Initialize the keyboard listener and rerun visualization
+    # Initialize the keyboard listener
     listener, events = init_terminal_keyboard_listener()
-    init_rerun(session_name="recording_so100_ee")
+    if args.gui:
+        init_rerun(session_name="recording_so101_ee")
 
     try:
         if not leader.is_connected or not follower.is_connected:
@@ -447,7 +454,7 @@ def main():
                 dataset=dataset,
                 control_time_s=EPISODE_TIME_SEC,
                 single_task=task_prompt,
-                display_data=True,
+                display_data=args.gui,
             )
 
             if events["rerecord_episode"]:
@@ -478,7 +485,7 @@ def main():
                     teleop=leader,
                     control_time_s=RESET_TIME_SEC,
                     single_task=task_prompt,
-                    display_data=True,
+                    display_data=args.gui,
                 )
                 events["exit_early"] = False
                 events["rerecord_episode"] = False

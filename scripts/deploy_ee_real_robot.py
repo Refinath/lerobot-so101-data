@@ -40,7 +40,6 @@ def parse_args():
     parser.add_argument("--follower-id", default="follower_arm", help="Follower arm calibration ID.")
     parser.add_argument("--wrist-cam", default="/dev/video2", help="Wrist camera device path.")
     parser.add_argument("--agent-cam", default="/dev/video8", help="Agent-view camera device path.")
-    parser.add_argument("--agent-depth-cam", default="/dev/video6", help="Agent depth camera device path.")
     parser.add_argument("--cam-width", type=int, default=640)
     parser.add_argument("--cam-height", type=int, default=480)
     parser.add_argument(
@@ -88,13 +87,6 @@ def main():
         ),
         "agent_view": OpenCVCameraConfig(
             index_or_path=args.agent_cam,
-            width=args.cam_width,
-            height=args.cam_height,
-            fps=args.fps,
-            fourcc="MJPG",
-        ),
-        "agent_view_depth": OpenCVCameraConfig(
-            index_or_path=args.agent_depth_cam,
             width=args.cam_width,
             height=args.cam_height,
             fps=args.fps,
@@ -154,7 +146,7 @@ def main():
 
     print(f"Policy:   {args.policy_path}")
     print(f"Robot:    so101_follower on {args.follower_port} ({args.follower_id})")
-    print(f"Cameras:  wrist={args.wrist_cam}  agent={args.agent_cam}  depth={args.agent_depth_cam}")
+    print(f"Cameras:  wrist={args.wrist_cam}  agent={args.agent_cam}")
     print(f"Task:     {args.task}")
     print(f"Duration: {args.duration}s @ {args.fps} FPS")
     confirm = input("Place the robot in a safe start pose, clear the workspace, then type RUN: ")
