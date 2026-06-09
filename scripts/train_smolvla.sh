@@ -38,7 +38,7 @@ HF_LEROBOT_HOME="${HF_LEROBOT_HOME:-$ROOT_DIR}"
 HF_HOME="${HF_HOME:-$ROOT_DIR/.cache/huggingface}"
 HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
 
-BASE_POLICY="${BASE_POLICY:-lerobot/smolvla_base}"
+BASE_POLICY="${BASE_POLICY:-}"  # leave empty to init from SmolVLM2 VLM weights only (see --policy.load_vlm_weights)
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/outputs/train/smolvla_$DATASET_NAME}"
 JOB_NAME="${JOB_NAME:-smolvla_so101}"
 POLICY_REPO_ID="${POLICY_REPO_ID:-}"
@@ -49,7 +49,9 @@ DEVICE="${DEVICE:-cuda}"
 DTYPE="${DTYPE:-bfloat16}"
 LR="${LR:-1e-4}"
 SCHEDULER_DECAY_LR="${SCHEDULER_DECAY_LR:-2.5e-6}"
-LORA_R="${LORA_R:-32}"
+# No LoRA: base PreTrainedPolicy blocks PEFT without a pretrained_path.
+# freeze_vision_encoder=True + train_expert_only=True already limits training
+# to the action expert, so LoRA is unnecessary.
 WANDB_ENABLE="${WANDB_ENABLE:-false}"
 PUSH_TO_HUB="${PUSH_TO_HUB:-false}"
 
@@ -96,7 +98,7 @@ if [[ -n "$RAW_DATASET_ROOT" && -d "$RAW_DATASET_ROOT" ]]; then
 fi
 
 args=(
-  --policy.path="$BASE_POLICY"
+  --policy.type=smolvla
   --policy.device="$DEVICE"
   --policy.load_vlm_weights=true
   --policy.freeze_vision_encoder=true
@@ -111,8 +113,6 @@ args=(
   --job_name="$JOB_NAME"
   --steps="$STEPS"
   --batch_size="$BATCH_SIZE"
-  --peft.method_type=LORA
-  --peft.r="$LORA_R"
   --wandb.enable="$WANDB_ENABLE"
   --policy.push_to_hub="$PUSH_TO_HUB"
 )
@@ -137,9 +137,9 @@ echo "  train:    $(command -v lerobot-train || true)"
 echo "  slurm:    ${SLURM_JOB_ID:-not running under Slurm}"
 echo "  dataset:  $DATASET_REPO_ID"
 echo "  root:     ${DATASET_ROOT:-LeRobot default cache}"
-echo "  base:     $BASE_POLICY"
+echo "  backbone: SmolVLM2-500M (load_vlm_weights=true)"
 echo "  output:   $OUTPUT_DIR"
-echo "  steps:    $STEPS  batch: $BATCH_SIZE  lr: $LR  lora_r: $LORA_R"
-echo "  device:   $DEVICE  dtype: $DTYPE"
+echo "  steps:    $STEPS  batch: $BATCH_SIZE  lr: $LR  (no LoRA; train_expert_only=true)"
+echo "  device:   $DEVICE"
 
 exec lerobot-train "${args[@]}" "$@"
