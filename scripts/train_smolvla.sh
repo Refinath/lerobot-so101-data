@@ -98,7 +98,6 @@ fi
 args=(
   --policy.path="$BASE_POLICY"
   --policy.device="$DEVICE"
-  --policy.dtype="$DTYPE"
   --policy.load_vlm_weights=true
   --policy.freeze_vision_encoder=true
   --policy.train_expert_only=true
