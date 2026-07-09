@@ -3,15 +3,17 @@
 
 2. Set Permission to the port
 
-`sudo chmod 666 /dev/ttyACM0`
+`sudo chmod 666 /dev/tty.usbmodem5B140303851`
 `sudo chmod 666 /dev/ttyACM1`
 
 3. Find Camera
 
 `lerobot-find-cameras opencv`
+ffplay -f avfoundation -video_device_index 1 -i ""
 
 - check camera feed 
 `cheese -d /dev/video6`
+`ffplay -f avfoundation -framerate 30 -i "0"`
 
 4. Calibrate Follower and the leader
 

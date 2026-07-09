@@ -1,0 +1,34 @@
+{
+  "_comment": "Language-ablation conditions (C0-C8) + per-task deployment config for the SO101 real-robot experiments. C0 == variant a (normal). scene_graph == variant b (handled by the runner, no fixed string). C1-C8 == variant c. Strings for C2 (garbage) and C3 (shuffled) are FIXED here so all 10 trials of a task use identical strings.",
+  "conditions": {
+    "C0": "Full instruction (baseline, == normal task)",
+    "C1": "Empty string",
+    "C2": "Random garbage",
+    "C3": "Shuffled words",
+    "C4": "Cross-task instruction (coherent, wrong task)",
+    "C5": "Action verb only",
+    "C6": "Objects only",
+    "C7": "Wrong object (one key object swapped)",
+    "C8": "Paraphrase"
+  },
+  "trials_per_condition": 10,
+  "tasks": {
+    "cube_to_drawer": {
+      "checkpoint": "outputs/train/smolvla_so101_cube_to_drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "avg_episode_s": 14.0,
+      "objects": ["black_cube_1", "black_cube_2", "blue_box", "drawer", "cylinder", "yellow_rectangle"],
+      "instructions": {
+        "C0": "Pick up the black cube on top of the blue box and place it inside the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "box the drawer cube on place blue the black up top and it of inside the Pick",
+        "C4": "Push the black cube farthest from the drawer toward the blue box",
+        "C5": "pick up and place inside",
+        "C6": "black cube blue box drawer",
+        "C7": "Pick up the black bowl on top of the blue box and place it inside the drawer",
+        "C8": "Lift the dark cube sitting on the blue box and set it down inside the drawer"
+      }
+    }
+  }
+}

@@ -1,0 +1,2 @@
+timestamp,task,condition,context_mode,env,instruction,grasp_success,task_success,ttc_s,failure_mode,media_dir,notes
+2026-07-09T14:10:50,cube_to_drawer,C0,standard,1,Pick up the black cube on top of the blue box and place it inside the drawer,0,0,nan,grasp_fail,experiments/results/media/cube_to_drawer/C0/trial_20260709_140837,"approach successful, grasp failed"

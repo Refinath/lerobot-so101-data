@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# large artifacts (transfer via rsync, not git)
+outputs/
+dataset/
+.DS_Store
+.gemini
