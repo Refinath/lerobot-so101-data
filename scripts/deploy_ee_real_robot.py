@@ -20,10 +20,15 @@ Usage:
 """
 
 import argparse
+import math
 import os
 import sys
+import time
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Index of ee.wy in the 7-D EE state/action vector [x, y, z, wx, wy, wz, gripper].
+_EE_WY_IDX = 4
 
 
 def parse_args():
@@ -71,9 +76,11 @@ def main():
     from lerobot.rollout import BaseStrategyConfig, RolloutConfig, build_rollout_context
     from lerobot.rollout.inference import SyncInferenceConfig
     from lerobot.rollout.strategies import BaseStrategy
+    from lerobot.rollout.strategies.core import send_next_action
     from lerobot.types import RobotAction, RobotObservation
     from lerobot.utils.constants import ACTION
     from lerobot.utils.process import ProcessSignalHandler
+    from lerobot.utils.robot_utils import precise_sleep
     from lerobot.utils.utils import init_logging
 
     init_logging()
@@ -188,7 +195,68 @@ def main():
     ctx.data.ordered_action_keys[:] = correct_action_keys
     ctx.policy.inference._ordered_action_keys = correct_action_keys
 
-    strategy = BaseStrategy(cfg.strategy)
+    class EeWyUnwrapStrategy(BaseStrategy):
+        """BaseStrategy with real-time ee.wy axis-angle unwrap.
+
+        The FK output can flip sign at the ±π boundary, making a tiny physical
+        wrist movement appear as a ~2π jump to the policy.  We track the
+        previous ee.wy reading and add/subtract 2π whenever the raw diff
+        exceeds π, keeping the value in the same rotational branch that the
+        training data (preprocessed with numpy.unwrap) used.
+        """
+
+        def run(self, ctx) -> None:
+            engine = self._engine
+            cfg = ctx.runtime.cfg
+            robot = ctx.hardware.robot_wrapper
+            interpolator = self._interpolator
+            control_interval = interpolator.get_control_interval(cfg.fps)
+
+            prev_wy = None
+            start_time = time.perf_counter()
+            engine.resume()
+
+            while not ctx.runtime.shutdown_event.is_set():
+                loop_start = time.perf_counter()
+
+                if cfg.duration > 0 and (time.perf_counter() - start_time) >= cfg.duration:
+                    print(f"Duration limit reached ({cfg.duration:.0f}s)")
+                    break
+
+                obs = robot.get_observation()
+                obs_processed = self._process_observation_and_notify(ctx.processors, obs)
+
+                if self._handle_warmup(cfg.use_torch_compile, loop_start, control_interval):
+                    continue
+
+                # Real-time ee.wy unwrap: prevent ±π axis-angle sign flips from
+                # looking like ~360° wrist snaps to the policy.
+                state = obs_processed["observation.state"]
+                wy = float(state[_EE_WY_IDX])
+                if prev_wy is not None:
+                    diff = wy - prev_wy
+                    if diff > math.pi:
+                        wy -= 2 * math.pi
+                    elif diff < -math.pi:
+                        wy += 2 * math.pi
+                    try:
+                        state[_EE_WY_IDX] = wy          # numpy: in-place
+                    except (TypeError, ValueError):
+                        state = state.clone()            # torch: clone first
+                        state[_EE_WY_IDX] = wy
+                        obs_processed["observation.state"] = state
+                prev_wy = wy
+
+                action_dict = send_next_action(obs_processed, obs, ctx, interpolator)
+                self._log_telemetry(obs_processed, action_dict, ctx.runtime)
+
+                dt = time.perf_counter() - loop_start
+                if (sleep_t := control_interval - dt) > 0:
+                    precise_sleep(sleep_t)
+                else:
+                    print(f"[warn] loop running slower ({1/dt:.1f} Hz) than target ({cfg.fps} Hz)")
+
+    strategy = EeWyUnwrapStrategy(cfg.strategy)
     try:
         strategy.setup(ctx)
         strategy.run(ctx)
