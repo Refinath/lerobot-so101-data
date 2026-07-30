@@ -1,0 +1,238 @@
+{
+  "_comment": "Language-ablation conditions (C0-C8) + scene_graph + covgate for all 12 SO101 real-robot tasks. C0 = standard full instruction. scene_graph = VLM-augmented (built at runtime). C1-C8 = ablation variants. C2 (garbage) and C3 (shuffled, seed=42) are FIXED so all trials of a task use identical strings.",
+  "conditions": {
+    "C0":          "Full instruction (baseline)",
+    "C1":          "Empty string",
+    "C2":          "Random garbage (fixed nonsense words, same across all tasks)",
+    "C3":          "Shuffled words (seed=42, fixed per task)",
+    "C4":          "Cross-task instruction (coherent, wrong task)",
+    "C5":          "Action verb only",
+    "C6":          "Objects only (no spatial relation, no verb)",
+    "C7":          "Wrong object (one key object swapped to a wrong one)",
+    "C8":          "Paraphrase (different wording, same semantics)",
+    "scene_graph": "C0 instruction prefixed with VLM scene-graph at episode start",
+    "covgate":     "C0 instruction with CovGate K=4 variance reduction (no language change)"
+  },
+  "episode_schedule": [
+    "C0", "scene_graph", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "covgate"
+  ],
+  "_schedule_note": "10-episode default cycle (Option B): each env setup runs exactly one condition. C8 can be added as episode 11 if extra trials are available.",
+  "tasks": {
+    "bowl_next_to_blue_box_to_drawer": {
+      "full_task_name": "pick-up-the-black-bowl-next-to-the-blue-box-and-place-it-on-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-bowl-next-to-the-blue-box-and-place-it-on-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-bowl-next-to-the-blue-box-and-place-it-on-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_bowl", "blue_box", "drawer", "yellow_rectangle", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black bowl next to the blue box and place it on the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "the box next to the and it blue up the on drawer bowl place Pick black",
+        "C4": "Pick up the black cube on top of the blue box and place it inside the drawer",
+        "C5": "pick up and place on",
+        "C6": "black bowl blue box drawer",
+        "C7": "Pick up the black cube next to the blue box and place it on the drawer",
+        "C8": "Grab the black bowl beside the blue box and set it down on the drawer"
+      }
+    },
+    "bowl_next_to_yellow_rect_to_bbox": {
+      "full_task_name": "pick-up-the-black-bowl-next-to-the-yellow-rectangle-and-place-it-on-top-of-the-blue-box",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-bowl-next-to-the-yellow-rectangle-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-bowl-next-to-the-yellow-rectangle-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_bowl", "yellow_rectangle", "blue_box", "drawer", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black bowl next to the yellow rectangle and place it on top of the blue box",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "top on bowl rectangle next of blue to it the and up place the box the yellow Pick black",
+        "C4": "Pick up the black cube next to the cookies and place it on top of the yellow rectangle",
+        "C5": "pick up and place on top",
+        "C6": "black bowl yellow rectangle blue box",
+        "C7": "Pick up the black cube next to the yellow rectangle and place it on top of the blue box",
+        "C8": "Grab the black bowl beside the yellow rectangle and set it on top of the blue box"
+      }
+    },
+    "bowl_on_top_of_bbox_to_drawer": {
+      "full_task_name": "pick-up-the-black-bowl-on-top-of-the-blue-box-and-place-it-on-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-bowl-on-top-of-the-blue-box-and-place-it-on-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-bowl-on-top-of-the-blue-box-and-place-it-on-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_bowl", "blue_box", "drawer", "yellow_rectangle", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black bowl on top of the blue box and place it on the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "of box on top the on it blue the up the place drawer bowl and Pick black",
+        "C4": "Pick up the black bowl next to the blue box and place it on the drawer",
+        "C5": "pick up and place on",
+        "C6": "black bowl blue box drawer",
+        "C7": "Pick up the black cube on top of the blue box and place it on the drawer",
+        "C8": "Lift the black bowl from the top of the blue box and put it on the drawer"
+      }
+    },
+    "bowl_on_top_of_cookies_to_bbox": {
+      "full_task_name": "pick-up-the-black-bowl-on-top-of-the-cookies-and-place-it-on-top-of-the-blue-box",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-bowl-on-top-of-the-cookies-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-bowl-on-top-of-the-cookies-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_bowl", "cookies", "blue_box", "drawer", "yellow_rectangle"],
+      "instructions": {
+        "C0": "Pick up the black bowl on top of the cookies and place it on top of the blue box",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "top on bowl cookies on of blue top it the and up place the box of the Pick black",
+        "C4": "Pick up the black bowl on top of the blue box and place it on the drawer",
+        "C5": "pick up and place on top",
+        "C6": "black bowl cookies blue box",
+        "C7": "Pick up the black cube on top of the cookies and place it on top of the blue box",
+        "C8": "Grab the black bowl sitting on the cookies and set it on top of the blue box"
+      }
+    },
+    "bowl_on_top_drawer_to_yellow_rect": {
+      "full_task_name": "pick-up-the-black-bowl-on-top-the-drawer-and-place-it-on-top-of-the-yellow-rectangle",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-bowl-on-top-the-drawer-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-bowl-on-top-the-drawer-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_bowl", "drawer", "yellow_rectangle", "blue_box", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black bowl on top of the drawer and place it on top of the yellow rectangle",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "top on bowl drawer on of yellow top it the and up place the rectangle of the Pick black",
+        "C4": "Pick up the black bowl next to the yellow rectangle and place it on top of the blue box",
+        "C5": "pick up and place on top",
+        "C6": "black bowl drawer yellow rectangle",
+        "C7": "Pick up the black cube on top of the drawer and place it on top of the yellow rectangle",
+        "C8": "Lift the black bowl from the top of the drawer and set it on top of the yellow rectangle"
+      }
+    },
+    "cube_between_bbox_and_rect_to_drawer": {
+      "full_task_name": "pick-up-the-black-cube-between-the-blue-box-and-the-yellow-rectangle-and-place-it-inside-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-between-the-blue-box-and-the-yellow-rectangle-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-between-the-blue-box-and-the-yellow-rectangle-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 35,
+      "objects": ["black_cube", "blue_box", "yellow_rectangle", "drawer", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black cube between the blue box and the yellow rectangle and place it inside the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "place and cube and between it the the rectangle inside the up yellow the drawer blue box Pick black",
+        "C4": "Pick up the black cube next to the blue box and place it on top of the yellow rectangle",
+        "C5": "pick up and place inside",
+        "C6": "black cube blue box yellow rectangle drawer",
+        "C7": "Pick up the black bowl between the blue box and the yellow rectangle and place it inside the drawer",
+        "C8": "Grab the black cube sitting between the blue box and the yellow rectangle and put it inside the drawer"
+      }
+    },
+    "cube_inside_drawer_to_bbox": {
+      "full_task_name": "pick-up-the-black-cube-inside-the-drawer-and-place-it-on-top-of-the-blue-box",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-inside-the-drawer-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-inside-the-drawer-and-place-it-on-top-of-the-blue-box/checkpoints/last/pretrained_model",
+      "duration_s": 35,
+      "objects": ["black_cube", "drawer", "blue_box", "yellow_rectangle", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black cube inside the drawer and place it on top of the blue box",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "drawer it inside the blue the of place and up the top box cube on Pick black",
+        "C4": "Pick up the black bowl on top of the blue box and place it on the drawer",
+        "C5": "pick up and place on top",
+        "C6": "black cube drawer blue box",
+        "C7": "Pick up the black bowl inside the drawer and place it on top of the blue box",
+        "C8": "Take the black cube out of the drawer and set it on top of the blue box"
+      }
+    },
+    "cube_next_to_bbox_to_rect": {
+      "full_task_name": "pick-up-the-black-cube-next-to-the-blue-box-and-place-it-on-top-of-the-yellow-rectangle",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-next-to-the-blue-box-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-next-to-the-blue-box-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_cube", "blue_box", "yellow_rectangle", "drawer", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black cube next to the blue box and place it on top of the yellow rectangle",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "top on cube box next of yellow to it the and up place the rectangle the blue Pick black",
+        "C4": "Pick up the black bowl next to the yellow rectangle and place it on top of the blue box",
+        "C5": "pick up and place on top",
+        "C6": "black cube blue box yellow rectangle",
+        "C7": "Pick up the black bowl next to the blue box and place it on top of the yellow rectangle",
+        "C8": "Grab the black cube beside the blue box and put it on top of the yellow rectangle"
+      }
+    },
+    "cube_next_to_cookies_to_rect": {
+      "full_task_name": "pick-up-the-black-cube-next-to-the-cookies-and-place-it-on-top-of-the-yellow-rectangle",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-next-to-the-cookies-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-next-to-the-cookies-and-place-it-on-top-of-the-yellow-rectangle/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_cube", "cookies", "yellow_rectangle", "blue_box", "drawer"],
+      "instructions": {
+        "C0": "Pick up the black cube next to the cookies and place it on top of the yellow rectangle",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "top on cube and next the yellow to place the up it the of rectangle cookies Pick black",
+        "C4": "Pick up the black bowl next to the blue box and place it on the drawer",
+        "C5": "pick up and place on top",
+        "C6": "black cube cookies yellow rectangle",
+        "C7": "Pick up the black bowl next to the cookies and place it on top of the yellow rectangle",
+        "C8": "Grab the black cube beside the cookies and set it on top of the yellow rectangle"
+      }
+    },
+    "cube_on_top_bbox_to_drawer": {
+      "full_task_name": "pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_cube", "blue_box", "drawer", "yellow_rectangle", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black cube on top of the blue box and place it inside the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "of box on top the inside it blue the up the place drawer cube and Pick black",
+        "C4": "Pick up the black bowl on top of the cookies and place it on top of the blue box",
+        "C5": "pick up and place inside",
+        "C6": "black cube blue box drawer",
+        "C7": "Pick up the black bowl on top of the blue box and place it inside the drawer",
+        "C8": "Lift the black cube from the top of the blue box and drop it inside the drawer"
+      }
+    },
+    "cube_on_top_cookies_to_drawer": {
+      "full_task_name": "pick-up-the-black-cube-on-top-of-the-cookies-and-place-it-inside-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-on-top-of-the-cookies-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-on-top-of-the-cookies-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_cube", "cookies", "drawer", "blue_box", "yellow_rectangle"],
+      "instructions": {
+        "C0": "Pick up the black cube on top of the cookies and place it inside the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "of cookies on top the and it the up the inside drawer cube place Pick black",
+        "C4": "Pick up the black cube next to the blue box and place it on top of the yellow rectangle",
+        "C5": "pick up and place inside",
+        "C6": "black cube cookies drawer",
+        "C7": "Pick up the black bowl on top of the cookies and place it inside the drawer",
+        "C8": "Lift the black cube from the top of the cookies and drop it inside the drawer"
+      }
+    },
+    "cube_on_top_rect_to_drawer": {
+      "full_task_name": "pick-up-the-black-cube-on-top-of-the-yellow-rectangle-and-place-it-inside-the-drawer",
+      "smolvla_checkpoint": "outputs/train/smolvla_pick-up-the-black-cube-on-top-of-the-yellow-rectangle-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "pi05_checkpoint":    "outputs/train/pi05_pick-up-the-black-cube-on-top-of-the-yellow-rectangle-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model",
+      "duration_s": 30,
+      "objects": ["black_cube", "yellow_rectangle", "drawer", "blue_box", "cookies"],
+      "instructions": {
+        "C0": "Pick up the black cube on top of the yellow rectangle and place it inside the drawer",
+        "C1": "",
+        "C2": "flim wadjup kreln vosp thandibax gorf plizzum",
+        "C3": "of rectangle on top the inside it yellow the up the place drawer cube and Pick black",
+        "C4": "Pick up the black bowl on top of the drawer and place it on top of the yellow rectangle",
+        "C5": "pick up and place inside",
+        "C6": "black cube yellow rectangle drawer",
+        "C7": "Pick up the black bowl on top of the yellow rectangle and place it inside the drawer",
+        "C8": "Lift the black cube from the top of the yellow rectangle and drop it inside the drawer"
+      }
+    }
+  }
+}
