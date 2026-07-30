@@ -23,7 +23,6 @@ paths differ on the day.
 ```bash
 cd /home/r84368868/lerobot-so101-data
 source /home/r84368868/miniconda3/bin/activate /home/r84368868/envs/lerobot/
-export COVGATE_ROOT="/home/r84368868/research/covgate_research"
 ```
 
 ---

@@ -26,11 +26,8 @@ import numpy as np
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-_COVGATE_ROOT = os.environ.get(
-    "COVGATE_ROOT", "/home/r84368868/research/covgate_research"
-)
-if _COVGATE_ROOT not in sys.path:
-    sys.path.insert(0, _COVGATE_ROOT)
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from covgate.gate import gate_action  # noqa: E402
 
