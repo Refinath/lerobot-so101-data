@@ -1,301 +1,277 @@
-# Deploying trained SmolVLA policies on the real SO101 (macOS)
+# SO101 Real-Robot Deployment Guide
 
-This document explains, in detail, how we got a trained SmolVLA policy running on
-the physical SO101 arm on an **Apple Silicon Mac (M1 Pro, macOS)**, how to find
-the camera IDs (especially the Intel RealSense), every problem we hit and how we
-fixed it, and how we sped the control loop up to the trained rate.
-
-Read this top-to-bottom the first time. After that, the **Quick start** and the
-**Troubleshooting** table are all you normally need.
+Describes the full deployment workflow for the SO101 arm on a **macOS laptop
+(Apple Silicon)**. Covers environment setup, running campaigns, single-episode
+commands, camera identification, control-loop timing, and troubleshooting.
 
 ---
 
 ## 0. TL;DR quick start
 
 ```bash
-# From the repo root, with the robot + wrist cam + RealSense connected.
-# .env line 1 must contain your macOS login password (used for sudo).
-{ sed -n 1p .env; echo RUN; } | sudo -S -E env \
-    PYTORCH_ENABLE_MPS_FALLBACK=1 HF_TOKEN=<your_hf_token> \
-    $(which python) scripts/deploy_ee_real_robot.py \
-      --policy-path outputs/train/<CHECKPOINT>/checkpoints/last/pretrained_model \
-      --task "<EXACT task string from tasks.txt>" \
-      --follower-port /dev/tty.usbmodem5B140303851 \
-      --wrist-cam 0 \
-      --agent-cam-serial 234222301106 \
-      --fps 30 --duration 60
+cd /path/to/lerobot-so101-data
+source /Users/refinath/work/envs/lerobot/bin/activate   # or conda activate …
+
+# Run the full 10-episode campaign for a task:
+python scripts/campaign_runner.py \
+    --task cube_on_top_bbox_to_drawer \
+    --policy pi05
 ```
 
-- `sudo` is **required** on macOS (the RealSense can only be opened as root — see §2).
-- `--fps 30` runs the policy at the rate it was trained at (see §6). Use a lower
-  value like `--fps 5` only to watch slow, stable motion.
-- Replace `<CHECKPOINT>` and `--task` using the table in §4.
+The campaign runner handles everything: shows each episode's condition and
+instruction, launches the correct deploy script, prompts for outcomes, and
+writes results to `experiments/results/trials.csv`.
 
 ---
 
-## 1. Hardware / software setup
+## 1. Hardware
 
-| Thing | Value |
+| Device | Default value |
 |---|---|
-| Machine | Apple Silicon Mac (M1 Pro, 16-core GPU), macOS (arm64) |
-| Python env | conda env at `/Users/refinath/work/envs/lerobot` (`$(which python)`) |
-| lerobot | editable checkout at `/Users/refinath/work/lerobot` (v0.5.2) |
-| Robot | SO101 follower, serial port `/dev/tty.usbmodem5B140303851` |
-| Wrist camera | generic USB UVC webcam → **OpenCV index 0** |
-| Agent-view camera | **Intel RealSense D455**, serial **234222301106** |
-| Inference device | **mps** (Metal) — the checkpoint hard-codes `cuda`, which does not exist here |
+| Machine | Apple Silicon Mac (M1 Pro), macOS |
+| Python env | `/Users/refinath/work/envs/lerobot` |
+| lerobot | editable checkout at `/Users/refinath/work/lerobot` |
+| Robot serial port | `/dev/tty.usbmodem5B140303851` |
+| Wrist camera | USB webcam — **OpenCV integer index** (re-verify each session) |
+| Agent-view camera | USB webcam — **OpenCV integer index** (re-verify each session) |
 
-The policy (`smolvla`) consumes **two 640×480 RGB image streams** named
-`observation.images.wrist` and `observation.images.agent_view`, plus a 7-D EE
-state, and outputs a 7-D end-effector action
-(`ee.x, ee.y, ee.z, ee.wx, ee.wy, ee.wz, ee.gripper_pos`).
+Both cameras are driven by OpenCV regardless of hardware (this matches the
+training data collection setup). Camera indices reshuffle on macOS whenever
+USB devices are plugged/unplugged — always verify at the start of a session
+(see §3).
+
+Override defaults with:
+```bash
+python scripts/campaign_runner.py --task <task> --policy pi05 \
+    --follower-port /dev/tty.usbmodemXXXX \
+    --wrist-cam 1 \
+    --agent-cam-opencv 2
+```
 
 ---
 
-## 2. Finding the camera IDs
+## 2. Environment setup (once per terminal session)
 
-There are **two** cameras and they are found in **completely different ways**.
+```bash
+cd /path/to/lerobot-so101-data
+source /Users/refinath/work/envs/lerobot/bin/activate
+# If using conda:
+# conda activate /Users/refinath/work/envs/lerobot
+export PYTORCH_ENABLE_MPS_FALLBACK=1   # required on Apple Silicon
+```
 
-### 2a. The wrist camera (OpenCV / plain USB webcam)
+---
 
-The wrist cam is a normal UVC webcam addressed by an **integer OpenCV index**.
-On macOS these indices are assigned by AVFoundation and **reshuffle whenever you
-plug/unplug any USB device** — so re-verify it each session.
+## 3. Finding camera indices (macOS)
 
-Probe the indices and save a frame from each working one:
+Camera OpenCV indices are assigned by AVFoundation and **change when USB devices
+are plugged or unplugged**. Run this probe at the start of each session:
 
 ```python
 import cv2, time
-for i in range(4):
+for i in range(6):
     cap = cv2.VideoCapture(i)
     if not cap.isOpened():
         cap.release(); continue
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640); cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     time.sleep(0.5)
-    ok = 0; f = None
+    ok, frame = 0, None
     for _ in range(6):
         r, f = cap.read(); ok += r; time.sleep(0.05)
     if ok and f is not None:
-        cv2.imwrite(f"/tmp/cam_{i}.jpg", f)      # open these and look
-    print(f"index {i}: reads_ok={ok}/6")
+        cv2.imwrite(f"/tmp/cam_{i}.jpg", f)
+    print(f"index {i}: frames_ok={ok}/6")
     cap.release()
 ```
 
-Then open the `/tmp/cam_*.jpg` files and pick the index that shows the **gripper
-close-up** (the SO101's teal fingers). In our setup that was **index 0**.
+Open `/tmp/cam_*.jpg`:
+- Wrist cam → shows the gripper close-up (teal fingers)
+- Agent-view cam → shows the full workspace (arm + objects)
 
-Notes we learned the hard way:
-- The **RealSense does NOT deliver frames through OpenCV on macOS** — it opens but
-  returns 0 frames at every resolution/format. So a working OpenCV index that
-  shows nothing / times out is usually the RealSense; skip it.
-- The Mac's **built-in FaceTime camera** also shows up (it points at your face) —
-  don't pick that one.
-
-### 2b. The agent-view camera (Intel RealSense — this is the important one)
-
-The RealSense will **not** work through OpenCV on macOS. It must be driven by
-Intel's `librealsense` backend, and it is addressed by its **serial number**, not
-an index — so it is stable no matter how many cameras you attach.
-
-**Step 1 — install the backend** (Apple Silicon has no official wheel; use the
-community macOS build, plus Homebrew's librealsense for the CLI tools):
-
-```bash
-pip install pyrealsense2-macosx        # provides `import pyrealsense2`
-brew install librealsense              # provides rs-enumerate-devices, etc.
-```
-
-**Step 2 — find the serial number.** On macOS, `librealsense` must *seize* the
-camera from the kernel's UVC driver, which **requires root**. So:
-
-```bash
-sudo rs-enumerate-devices
-```
-
-Look for the `Serial Number` field, e.g.:
-
-```
-Name              : Intel RealSense D455
-Serial Number     : 234222301106
-Firmware Version  : 5.13.1.53
-Product Id        : 0B5C
-Usb Type Descriptor : 3.2
-...
-Stream Profiles supported by RGB Camera
-    Color   640x480   RGB8   @ 60/30/15/5 Hz     <- this is what the policy uses
-```
-
-That `Serial Number` is what you pass to `--agent-cam-serial`.
-
-**Why sudo?** Without root, `rs-enumerate-devices` prints *"No device detected"*
-and `librealsense` reports 0 devices even though the camera is clearly enumerated
-at the USB level (visible in `ioreg -p IOUSB`). macOS binds the RealSense's video
-interfaces to its own UVC driver, and only a **root** process can seize them back.
-There is **no udev-style permission fix on macOS** (that only exists on Linux —
-Intel's `99-realsense-libusb.rules`). Granting the terminal "Camera" permission
-does *not* help, because that governs AVFoundation, not the raw USB access
-librealsense needs. Practical consequence: **every RealSense run on this Mac must
-be `sudo`.** To avoid typing the password each time, either prime it once with
-`sudo -v`, or add a scoped `NOPASSWD` entry in `/etc/sudoers.d/`.
-
-**Sanity-check the wiring before touching the robot** with the no-motor preflight:
-
-```bash
-sudo -E $(which python) scripts/preflight_cameras.py \
-    --wrist-cam 0 --agent-cam-serial 234222301106 --out /tmp/preflight
-# then open /tmp/preflight/wrist.jpg and /tmp/preflight/agent_view.jpg
-```
-
-`wrist.jpg` should show the gripper; `agent_view.jpg` should show the whole
-workspace (arm + cubes + blue box). If they're swapped or wrong, fix the index
-before running the policy.
+Both cameras must be accessed via OpenCV — this is what the training data was
+collected with. Do **not** use the librealsense backend even if the agent-view
+camera is a RealSense physically; use `--agent-cam-opencv <index>` with the
+OpenCV index found above.
 
 ---
 
-## 3. What the deploy script does (and what we changed)
+## 4. Pre-flight checklist (every session)
 
-`scripts/deploy_ee_real_robot.py` wraps lerobot's rollout engine with the SO101
-forward/inverse-kinematics processors so the joint-space robot talks to the
-EE-space policy. Changes we made for macOS reliability:
+1. **Arm power** — confirm motors are powered; check with:
+   ```bash
+   python scripts/check_arm.py --follower-port /dev/tty.usbmodemXXXX
+   ```
+   This reads joint positions, temperatures, and does a 5° wrist micro-move.
+   If a servo is missing (`no status packet`), power-cycle and reseat the
+   daisy-chain cable near that motor.
 
-- **`--agent-cam-serial`** — routes `agent_view` through the RealSense
-  (`librealsense`) backend instead of OpenCV. Required on macOS.
-- **`--wrist-cam`** now accepts an **integer index** (macOS) as well as a Linux
-  `/dev/videoN` path.
-- **Wrist camera uses auto video format (no MJPG) + 3 s warmup.** Forcing MJPG
-  fails to set on macOS and could leave the camera unable to deliver its first
-  frame (connect-time `TimeoutError`). `--wrist-fourcc` can override if needed.
-- **RealSense warmup raised to 2 s** — 1 s sometimes timed out on the first frame;
-  5 s increased exposure to an intermittent backend crash (see §7). 2 s was the
-  sweet spot.
-- **Device auto-select** — the checkpoint records `device="cuda"`, and lerobot's
-  rollout trusted that string without checking availability. We force a real,
-  available device, which resolves to **mps** here.
+2. **Camera indices** — run the probe above; plug order changes indices.
 
-Two more no-motor helper scripts were added:
-- `scripts/preflight_cameras.py` — connect both cameras, save a frame from each.
-- `scripts/diagnose_policy.py` — read the robot + cameras, run the policy, and
-  print the EE state, predicted action, IK targets, in-distribution checks, and
-  **per-step timing** — all **without sending any motor command**.
-- `scripts/profile_deploy.py` — time camera reads vs. policy inference in isolation.
+3. **Scene arrangement** — set up objects for the task. Exact positions are
+   randomised per env-setup, but the objects must be the right ones for the task.
+
+4. **Start pose** — place the arm in a raised, mid-workspace ready pose (similar
+   to where teleop episodes started). Tucked or edge poses are out-of-distribution
+   and will cause an immediate lurch.
+
+5. **Home** — home the arm before each episode.
 
 ---
 
-## 4. Checkpoint ↔ task ↔ scene
+## 5. Running a campaign (normal workflow)
 
-The `--task` string **must match the training instruction exactly** (SmolVLA is
-language-conditioned). The exact strings live in `tasks.txt`:
+The campaign runner executes 10 episodes for one task in the fixed Option-B order,
+prompts for outcomes after each, and appends to `experiments/results/trials.csv`.
 
-| Checkpoint (`outputs/train/…`) | Exact `--task` string | Scene must contain |
+```bash
+# Pi0.5 policy:
+python scripts/campaign_runner.py --task <task_key> --policy pi05
+
+# SmolVLA policy:
+python scripts/campaign_runner.py --task <task_key> --policy smolvla
+
+# Resume after interruption (0-indexed; resume from episode 4 = --start-episode 3):
+python scripts/campaign_runner.py --task <task_key> --policy pi05 --start-episode 3
+```
+
+### Episode schedule (Option B)
+
+| Ep | Condition | What the policy receives |
 |---|---|---|
-| `smolvla_so101_cube_to_drawer` | `Pick up the black cube on top of the blue box and place it inside the drawer` | black cube on blue box, drawer |
-| `smolvla_so101_two_cubes_arrange` | `Pick up two black cubes and arrange them on either side of the blue box (one left, one right)` | 2 black cubes, blue box |
-| `smolvla_so101_push_cube` | `Push the black cube farthest from the drawer toward the blue box` | cubes, drawer, blue box |
-| `smolvla_so101_bowl_yellow_rectangle` | `Pick up the black bowl in the drawer and place it on the yellow rectangle` | bowl in drawer, yellow rectangle |
+| 1 | C0 | Full instruction (baseline) |
+| 2 | scene_graph | C0 + Gemini VLM scene-graph prefix |
+| 3 | C1 | Empty string |
+| 4 | C2 | Fixed garbage words |
+| 5 | C3 | Shuffled words (seed=42, fixed per task) |
+| 6 | C4 | Coherent instruction for a different task |
+| 7 | C5 | Action verb only |
+| 8 | C6 | Objects only (no verb, no spatial relation) |
+| 9 | C7 | Wrong object (one key noun swapped) |
+| 10 | covgate | C0 instruction + CovGate K=4 variance reduction |
 
-The physical table **must** be arranged like the training scene or the policy
-cannot succeed.
+All instruction strings are in `experiments/ablations.json`.
+
+### Valid task keys
+
+| Task key | Full task name |
+|---|---|
+| `bowl_next_to_blue_box_to_drawer` | pick-up-the-black-bowl-next-to-the-blue-box-and-place-it-on-the-drawer |
+| `bowl_next_to_yellow_rect_to_bbox` | pick-up-the-black-bowl-next-to-the-yellow-rectangle-and-place-it-on-top-of-the-blue-box |
+| `bowl_on_top_of_bbox_to_drawer` | pick-up-the-black-bowl-on-top-of-the-blue-box-and-place-it-on-the-drawer |
+| `bowl_on_top_of_cookies_to_bbox` | pick-up-the-black-bowl-on-top-of-the-cookies-and-place-it-on-top-of-the-blue-box |
+| `bowl_on_top_drawer_to_yellow_rect` | pick-up-the-black-bowl-on-top-the-drawer-and-place-it-on-top-of-the-yellow-rectangle |
+| `cube_between_bbox_and_rect_to_drawer` | pick-up-the-black-cube-between-the-blue-box-and-the-yellow-rectangle-and-place-it-inside-the-drawer |
+| `cube_inside_drawer_to_bbox` | pick-up-the-black-cube-inside-the-drawer-and-place-it-on-top-of-the-blue-box |
+| `cube_next_to_bbox_to_rect` | pick-up-the-black-cube-next-to-the-blue-box-and-place-it-on-top-of-the-yellow-rectangle |
+| `cube_next_to_cookies_to_rect` | pick-up-the-black-cube-next-to-the-cookies-and-place-it-on-top-of-the-yellow-rectangle |
+| `cube_on_top_bbox_to_drawer` | pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer |
+| `cube_on_top_cookies_to_drawer` | pick-up-the-black-cube-on-top-of-the-cookies-and-place-it-inside-the-drawer |
+| `cube_on_top_rect_to_drawer` | pick-up-the-black-cube-on-top-of-the-yellow-rectangle-and-place-it-inside-the-drawer |
 
 ---
 
-## 5. Pre-flight checklist (every session)
+## 6. Running a single episode manually
 
-1. **Motors** — power the arm. If a run fails with `Failed to write 'Lock' on
-   id_=N … There is no status packet!`, that servo dropped off the bus:
-   power-cycle the arm and reseat the daisy-chain cable near that motor.
-2. **Wrist camera index** — re-verify (see §2a); it changes when USB devices move.
-3. **RealSense serial** — stable, but confirm with `sudo rs-enumerate-devices` if
-   you swapped cameras.
-4. **Scene + start pose** — arrange the table for the task, and put the arm in a
-   **raised, mid-workspace "ready" pose**, similar to where your teleop episodes
-   started. Do **not** start from a tucked/edge pose — that is out-of-distribution
-   and the first policy command will lurch.
-5. **Keep the USB bus lean** — extra RealSense cameras add contention and raise
-   the chance of the intermittent connect crash (§7).
+If you need to run one condition outside the campaign loop:
 
----
+```bash
+# Standard / ablation conditions (C0–C8) or scene_graph:
+python scripts/run_episode_mac.py \
+    --policy-path outputs/train/pi05_<full-task-name>/checkpoints/last/pretrained_model \
+    --task cube_on_top_bbox_to_drawer \
+    --instruction "Pick up the black cube on top of the blue box and place it inside the drawer" \
+    --condition C0 \
+    --context-mode standard \
+    --duration 30 \
+    --wrist-cam 0 \
+    --agent-cam-opencv 2
 
-## 6. Speeding up the control loop (the important part)
+# scene_graph (Gemini augments the instruction at episode start):
+python scripts/run_episode_mac.py \
+    --policy-path outputs/train/pi05_<full-task-name>/checkpoints/last/pretrained_model \
+    --task cube_on_top_bbox_to_drawer \
+    --instruction "Pick up the black cube on top of the blue box and place it inside the drawer" \
+    --condition scene_graph \
+    --context-mode scene_graph \
+    --duration 30
 
-### The symptom
-The loop printed warnings like *"Record loop is running slower (4.3 Hz) than the
-target FPS (30 Hz) … 1) Camera FPS 2) Policy inference 3) CPU starvation"*, and
-the arm approached objects but **missed the grasp**. The same warning appears on
-the Linux+GPU box too.
-
-### How we found the real bottleneck
-We added **per-step timing** to `scripts/diagnose_policy.py` (no motor motion) and
-measured each phase over many steps:
-
+# CovGate (K=4 independent samples, eigenvalue-weighted gating):
+python scripts/deploy_ee_covgate.py \
+    --policy-path outputs/train/pi05_<full-task-name>/checkpoints/last/pretrained_model \
+    --task "Pick up the black cube on top of the blue box and place it inside the drawer" \
+    --duration 30 \
+    --k-samples 4
 ```
-get_observation (camera read):   1.0 ms      <- NOT the bottleneck
-obs_processor  (forward kine):    0.0 ms
-build_frame:                      0.0 ms
-get_action     (inference):       3.4 ms median  BUT  416 ms max
-TOTAL / step:                     4.4 ms  ->  ~227 Hz ceiling
+
+### Dry run (no robot, no cameras — tests the policy loading and logic only)
+
+```bash
+python scripts/run_episode_mac.py \
+    --policy-path outputs/train/pi05_<task>/checkpoints/last/pretrained_model \
+    --task cube_on_top_bbox_to_drawer \
+    --instruction "..." \
+    --condition C0 \
+    --dry-run --dry-seconds 6
 ```
-
-**Key insight:** cameras are *not* the problem (1 ms). The loop can do ~227 Hz.
-SmolVLA predicts **50 actions per inference** (`chunk_size = n_action_steps = 50`),
-so 49 of every 50 steps just pop a pre-computed action (~3 ms) and only the **50th
-step re-runs the model synchronously and freezes for ~416 ms**.
-
-That single periodic freeze is what trips the warning. It is *not* a uniform
-slowdown — and it is *not* the camera or the GPU. On the Linux box the same
-periodic synchronous re-plan is what shows up as "CPU starvation".
-
-### The fix that worked: run at `--fps 30`
-Because per-step work is only 4.4 ms, the loop happily sustains 30 Hz **between**
-the re-plan hitches. Evidence: at `--fps 30` over 20 s we saw only **~11 warnings**
-(one per action chunk ≈ every 1.7 s). If the loop were genuinely stuck at ~4 Hz,
-*every* step would warn (600+). So between hitches it runs at the **full 30 Hz —
-the trained rate** — with a brief ~220 ms hitch every ~1.7 s. Switching from
-`--fps 5` to `--fps 30` made the arm visibly much faster and more decisive.
-
-### Further speedups (optional)
-- **RTC inference** (`RTCInferenceConfig`, "Real-Time Chunking") — overlaps the
-  re-plan with motion so there is **no hitch at all**. This is the proper
-  real-time fix and also cures the Linux "CPU starvation". Not yet wired into the
-  deploy script (would be a `--rtc` flag).
-- **Fewer flow-matching steps** — SmolVLA's 416 ms is `num_steps = 10` denoising
-  steps. Dropping to ~5 roughly halves each hitch, at a small quality cost.
-- **Linux + GPU** for the real grasp-success evaluation — faster inference shrinks
-  the hitch further and hits a clean 30 Hz most easily.
-
-### What is NOT the bottleneck (so don't chase these)
-- Camera FPS / the RealSense — reads are 1 ms (frames are served from a background
-  thread; you read the latest cached frame).
-- The GPU — inference is chunked; a faster GPU only shrinks the periodic hitch.
 
 ---
 
-## 7. Troubleshooting
+## 7. Checkpoint paths
 
-| Symptom in the log | Cause | Fix |
+Pattern: `outputs/train/<policy>_<full-task-name>/checkpoints/last/pretrained_model`
+
+Example:
+```
+outputs/train/pi05_pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model
+outputs/train/smolvla_pick-up-the-black-cube-on-top-of-the-blue-box-and-place-it-inside-the-drawer/checkpoints/last/pretrained_model
+```
+
+The campaign runner resolves checkpoint paths automatically from
+`experiments/ablations.json` — you only need the task key and policy name.
+
+---
+
+## 8. Control loop timing
+
+SmolVLA and Pi0.5 are trained at 30 Hz but produce action **chunks** (50 steps
+each). 49 of every 50 steps pop a pre-computed action (~3–5 ms); the 50th step
+re-runs the model synchronously (~200–400 ms on MPS).
+
+This creates a periodic hitch every ~1.7 s rather than a uniform slowdown. At
+`--fps 30` the loop runs at the full trained rate between hitches, which is
+visibly faster and more decisive than running at a lower fps.
+
+Run at `--fps 30` (the default). Warnings like *"loop slower than target"* appearing
+once every ~1–2 s are expected and harmless.
+
+**CovGate** draws K=4 samples per re-plan, so the hitch is ~4× longer
+(~800–1500 ms on MPS). Everything else is identical.
+
+---
+
+## 9. Result recording
+
+The campaign runner appends one row per episode to `experiments/results/trials.csv`.
+
+Schema: `timestamp, task, task_key, policy, condition, context_mode, episode_idx,
+env_idx, instruction, approached, grasped, task_success, failure_mode, ttc_s,
+media_dir, notes`.
+
+Do not edit this file manually — the runner appends atomically.
+
+---
+
+## 10. Troubleshooting
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `No device detected` / 0 RealSense devices | Not running as root | Run with `sudo` (see §2b) |
-| `Timed out waiting for frame from camera OpenCVCamera(0)` | Wrong wrist index, or MJPG left the cam in a bad state | Re-verify index (§2a); the script already avoids MJPG + uses 3 s warmup |
-| `Timed out … RealSenseCamera(...) after 1000 ms` | RealSense first-frame slow | RealSense warmup is 2 s; just retry |
-| `EXIT=139` (segfault) right after a camera connects | `cv2` and `av` each bundle their own `libavdevice` (duplicate Obj-C classes → intermittent crash) | Can't remove either (both are hard deps). It's a ~50/50 dice roll — **just retry**; keep only needed cameras attached |
-| `Failed to write 'Lock' on id_=N … no status packet` | A servo dropped off the motor bus | Power-cycle the arm, reseat the daisy-chain cable near that motor |
-| `Device 'cuda' is not available. Switching to 'mps'` | Checkpoint hard-codes cuda | Harmless — the script forces a valid device |
-| Arm shakes / lurches, no task progress | Out-of-distribution **start pose** (e.g. tucked at workspace edge, `ee.z` at the training minimum) | Start from a raised, mid-workspace ready pose (§5) |
-| Arm approaches the object but misses the grasp | Control rate too low for the timing-critical grasp | Use `--fps 30` (§6); for real success rate, run on Linux+GPU |
-| Warning every ~1–2 s but motion is smooth otherwise | Normal — the periodic re-plan hitch | Optional: RTC inference or fewer flow steps (§6) |
-
----
-
-## 8. Verified healthy (ruled out as causes)
-
-During debugging we confirmed, with `scripts/diagnose_policy.py` (no motor motion):
-- **Cameras are correct and not swapped** — verified visually and via the recorded
-  per-camera brightness stats (wrist ≈ 0.65, agent_view ≈ 0.51) matching the live
-  frames; also proven by the arm moving *toward* the correct object.
-- **FK/IK is self-consistent** — IK of the current EE pose reproduces the current
-  joint angles to within ~2°, so there is no calibration/URDF/rotation bug.
-- **Policy outputs are in-distribution and coherent** — predicted actions fall
-  inside the training action ranges and form sensible reach/grasp motions.
-
-So the only remaining gap is **grasp precision**, which is a control-rate /
-policy-training matter, not a setup bug. Approaching the correct object (the hard
-perceptual part) already works.
+| `Timed out waiting for frame from camera` | Wrong wrist index | Re-run camera probe (§3); indices reshuffle on USB plug/unplug |
+| Camera opens but returns 0 frames | OpenCV index is wrong | Re-run camera probe (§3); use `--agent-cam-opencv`, not a serial number |
+| `Failed to write 'Lock' on id_=N … no status packet` | Servo dropped off motor bus | Power-cycle arm, reseat daisy-chain cable near that motor |
+| `Device 'cuda' is not available` | Checkpoint hard-codes cuda | Set `--device mps` or leave blank (auto-selects mps on Apple Silicon) |
+| Arm lurches immediately | Out-of-distribution start pose | Start from raised, mid-workspace ready pose (§4) |
+| Arm approaches but misses grasp | Control rate / timing | Ensure `--fps 30`; for highest success rate use Linux + GPU |
+| Warning every ~1–2 s, motion otherwise smooth | Normal periodic re-plan hitch | Expected — see §8 |
+| `EXIT=139` (segfault) after camera connect | `cv2`/`av` libavdevice conflict on macOS | Retry — it's an intermittent crash (~50% rate); keep only needed cameras attached |
+| `GOOGLE_API_KEY not set` | scene_graph needs Gemini key | `export GOOGLE_API_KEY=<key>` before running |
