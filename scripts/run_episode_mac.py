@@ -42,14 +42,15 @@ def parse_args():
     p.add_argument("--duration", type=float, default=25.0)
     p.add_argument("--fps", type=int, default=30)
     p.add_argument("--device", default=None)
-    p.add_argument("--follower-port", default="/dev/tty.usbmodem5B140303851")
+    p.add_argument("--follower-port", default="/dev/ttyACM0")
     p.add_argument("--follower-id", default="follower_arm")
-    p.add_argument("--wrist-cam", default="0")
-    p.add_argument("--agent-cam-serial", default="339222071083",
-                   help="RealSense serial (librealsense path). Only used if --agent-cam-opencv is not set.")
-    p.add_argument("--agent-cam-opencv", default=None,
-                   help="OpenCV index for the RealSense RGB via AVFoundation (preferred on macOS, where "
-                        "librealsense streaming crashes). Identify it each session with a camera probe.")
+    p.add_argument("--wrist-cam", default="/dev/video2",
+                   help="Wrist camera: /dev/videoN path (Linux) or integer index.")
+    p.add_argument("--agent-cam-serial", default=None,
+                   help="RealSense serial for librealsense backend. Not used — training data was "
+                        "collected via OpenCV; always use --agent-cam-opencv instead.")
+    p.add_argument("--agent-cam-opencv", default="/dev/video8",
+                   help="Agent-view camera: /dev/videoN path (Linux) or integer index.")
     p.add_argument("--cam-width", type=int, default=640)
     p.add_argument("--cam-height", type=int, default=480)
     p.add_argument("--urdf", default=os.path.join(ROOT_DIR, "SO101", "so101_new_calib.urdf"))

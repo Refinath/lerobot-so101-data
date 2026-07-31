@@ -1,16 +1,16 @@
 # SO101 Real-Robot Deployment Guide
 
-Describes the full deployment workflow for the SO101 arm on a **macOS laptop
-(Apple Silicon)**. Covers environment setup, running campaigns, single-episode
-commands, camera identification, control-loop timing, and troubleshooting.
+Describes the full deployment workflow for the SO101 arm on an **Ubuntu laptop**.
+Covers environment setup, running campaigns, single-episode commands, camera
+identification, control-loop timing, and troubleshooting.
 
 ---
 
 ## 0. TL;DR quick start
 
 ```bash
-cd /path/to/lerobot-so101-data
-source /Users/refinath/work/envs/lerobot/bin/activate   # or conda activate …
+cd /home/r84368868/lerobot-so101-data
+source /home/r84368868/miniconda3/bin/activate /home/r84368868/envs/lerobot/
 
 # Run the full 10-episode campaign for a task:
 python scripts/campaign_runner.py \
@@ -26,26 +26,25 @@ writes results to `experiments/results/trials.csv`.
 
 ## 1. Hardware
 
-| Device | Default value |
+| Device | Default path |
 |---|---|
-| Machine | Apple Silicon Mac (M1 Pro), macOS |
-| Python env | `/Users/refinath/work/envs/lerobot` |
-| lerobot | editable checkout at `/Users/refinath/work/lerobot` |
-| Robot serial port | `/dev/tty.usbmodem5B140303851` |
-| Wrist camera | USB webcam — **OpenCV integer index** (re-verify each session) |
-| Agent-view camera | USB webcam — **OpenCV integer index** (re-verify each session) |
+| Follower arm serial | `/dev/ttyACM0` |
+| Wrist camera | `/dev/video2` |
+| Agent-view camera | `/dev/video8` |
 
-Both cameras are driven by OpenCV regardless of hardware (this matches the
-training data collection setup). Camera indices reshuffle on macOS whenever
-USB devices are plugged/unplugged — always verify at the start of a session
-(see §3).
+On Linux, device paths are stable across sessions (assigned by udev). Verify
+they are correct after replugging with `ls /dev/ttyACM* /dev/video*`.
+
+Both cameras are driven by **OpenCV** (`/dev/videoN` path). This matches the
+training data collection setup — do not use the librealsense backend even if
+the agent-view camera is a RealSense physically.
 
 Override defaults with:
 ```bash
 python scripts/campaign_runner.py --task <task> --policy pi05 \
-    --follower-port /dev/tty.usbmodemXXXX \
-    --wrist-cam 1 \
-    --agent-cam-opencv 2
+    --follower-port /dev/ttyACM1 \
+    --wrist-cam /dev/video4 \
+    --agent-cam-opencv /dev/video6
 ```
 
 ---
@@ -53,67 +52,63 @@ python scripts/campaign_runner.py --task <task> --policy pi05 \
 ## 2. Environment setup (once per terminal session)
 
 ```bash
-cd /path/to/lerobot-so101-data
-source /Users/refinath/work/envs/lerobot/bin/activate
-# If using conda:
-# conda activate /Users/refinath/work/envs/lerobot
-export PYTORCH_ENABLE_MPS_FALLBACK=1   # required on Apple Silicon
+cd /home/r84368868/lerobot-so101-data
+source /home/r84368868/miniconda3/bin/activate /home/r84368868/envs/lerobot/
 ```
 
 ---
 
-## 3. Finding camera indices (macOS)
+## 3. Identifying camera devices (Linux)
 
-Camera OpenCV indices are assigned by AVFoundation and **change when USB devices
-are plugged or unplugged**. Run this probe at the start of each session:
+On Linux, camera paths are stable but it is worth confirming which `/dev/videoN`
+corresponds to which physical camera after replugging:
 
-```python
-import cv2, time
-for i in range(6):
-    cap = cv2.VideoCapture(i)
-    if not cap.isOpened():
-        cap.release(); continue
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    time.sleep(0.5)
-    ok, frame = 0, None
-    for _ in range(6):
-        r, f = cap.read(); ok += r; time.sleep(0.05)
-    if ok and f is not None:
-        cv2.imwrite(f"/tmp/cam_{i}.jpg", f)
-    print(f"index {i}: frames_ok={ok}/6")
-    cap.release()
+```bash
+v4l2-ctl --list-devices
 ```
 
-Open `/tmp/cam_*.jpg`:
+This shows each camera with its device nodes. Alternatively, capture a test frame:
+
+```bash
+python - <<'EOF'
+import cv2
+for dev in ["/dev/video2", "/dev/video4", "/dev/video6", "/dev/video8"]:
+    cap = cv2.VideoCapture(dev)
+    if not cap.isOpened():
+        print(f"{dev}: not available"); continue
+    ok, frame = cap.read()
+    if ok:
+        cv2.imwrite(f"/tmp/cam_{dev.split('/')[-1]}.jpg", frame)
+        print(f"{dev}: OK — saved /tmp/cam_{dev.split('/')[-1]}.jpg")
+    cap.release()
+EOF
+```
+
+Open the saved frames:
 - Wrist cam → shows the gripper close-up (teal fingers)
 - Agent-view cam → shows the full workspace (arm + objects)
-
-Both cameras must be accessed via OpenCV — this is what the training data was
-collected with. Do **not** use the librealsense backend even if the agent-view
-camera is a RealSense physically; use `--agent-cam-opencv <index>` with the
-OpenCV index found above.
 
 ---
 
 ## 4. Pre-flight checklist (every session)
 
-1. **Arm power** — confirm motors are powered; check with:
+1. **Arm check** — verify motors are live and temperatures are safe:
    ```bash
-   python scripts/check_arm.py --follower-port /dev/tty.usbmodemXXXX
+   python scripts/check_arm.py --follower-port /dev/ttyACM0
    ```
    This reads joint positions, temperatures, and does a 5° wrist micro-move.
-   If a servo is missing (`no status packet`), power-cycle and reseat the
-   daisy-chain cable near that motor.
+   If a servo is missing (`no status packet`), power-cycle the arm and reseat
+   the daisy-chain cable near that motor.
 
-2. **Camera indices** — run the probe above; plug order changes indices.
+2. **Camera devices** — confirm `/dev/video2` (wrist) and `/dev/video8`
+   (agent-view) are present: `ls /dev/video*`.
 
 3. **Scene arrangement** — set up objects for the task. Exact positions are
-   randomised per env-setup, but the objects must be the right ones for the task.
+   randomised per env-setup, but the correct objects must be present.
 
-4. **Start pose** — place the arm in a raised, mid-workspace ready pose (similar
-   to where teleop episodes started). Tucked or edge poses are out-of-distribution
-   and will cause an immediate lurch.
+4. **Start pose** — place the arm in a raised, mid-workspace ready pose
+   (similar to where teleop episodes started). Tucked or edge poses are
+   out-of-distribution and will cause an immediate lurch on first action.
 
 5. **Home** — home the arm before each episode.
 
@@ -131,7 +126,7 @@ python scripts/campaign_runner.py --task <task_key> --policy pi05
 # SmolVLA policy:
 python scripts/campaign_runner.py --task <task_key> --policy smolvla
 
-# Resume after interruption (0-indexed; resume from episode 4 = --start-episode 3):
+# Resume after interruption (0-indexed; to resume from episode 4 use --start-episode 3):
 python scripts/campaign_runner.py --task <task_key> --policy pi05 --start-episode 3
 ```
 
@@ -176,16 +171,14 @@ All instruction strings are in `experiments/ablations.json`.
 If you need to run one condition outside the campaign loop:
 
 ```bash
-# Standard / ablation conditions (C0–C8) or scene_graph:
+# Standard / ablation conditions (C0–C8):
 python scripts/run_episode_mac.py \
     --policy-path outputs/train/pi05_<full-task-name>/checkpoints/last/pretrained_model \
     --task cube_on_top_bbox_to_drawer \
     --instruction "Pick up the black cube on top of the blue box and place it inside the drawer" \
     --condition C0 \
     --context-mode standard \
-    --duration 30 \
-    --wrist-cam 0 \
-    --agent-cam-opencv 2
+    --duration 30
 
 # scene_graph (Gemini augments the instruction at episode start):
 python scripts/run_episode_mac.py \
@@ -204,7 +197,7 @@ python scripts/deploy_ee_covgate.py \
     --k-samples 4
 ```
 
-### Dry run (no robot, no cameras — tests the policy loading and logic only)
+### Dry run (no robot, no cameras — tests policy loading and logic only)
 
 ```bash
 python scripts/run_episode_mac.py \
@@ -234,19 +227,16 @@ The campaign runner resolves checkpoint paths automatically from
 
 ## 8. Control loop timing
 
-SmolVLA and Pi0.5 are trained at 30 Hz but produce action **chunks** (50 steps
-each). 49 of every 50 steps pop a pre-computed action (~3–5 ms); the 50th step
-re-runs the model synchronously (~200–400 ms on MPS).
+SmolVLA and Pi0.5 produce action **chunks** (50 steps each) at 30 Hz. 49 of
+every 50 steps pop a pre-computed action (~3–5 ms); the 50th step re-runs the
+model synchronously (~50–200 ms on GPU). This creates one brief hitch per chunk
+(every ~1.7 s) rather than a uniform slowdown.
 
-This creates a periodic hitch every ~1.7 s rather than a uniform slowdown. At
-`--fps 30` the loop runs at the full trained rate between hitches, which is
-visibly faster and more decisive than running at a lower fps.
+Run at `--fps 30` (the default). Warnings like *"loop slower than target"*
+appearing once every ~1–2 s are expected and harmless.
 
-Run at `--fps 30` (the default). Warnings like *"loop slower than target"* appearing
-once every ~1–2 s are expected and harmless.
-
-**CovGate** draws K=4 samples per re-plan, so the hitch is ~4× longer
-(~800–1500 ms on MPS). Everything else is identical.
+**CovGate** draws K=4 samples per re-plan, so the hitch is ~4× longer. All
+inter-hitch steps still run at full 30 Hz.
 
 ---
 
@@ -266,12 +256,12 @@ Do not edit this file manually — the runner appends atomically.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Timed out waiting for frame from camera` | Wrong wrist index | Re-run camera probe (§3); indices reshuffle on USB plug/unplug |
-| Camera opens but returns 0 frames | OpenCV index is wrong | Re-run camera probe (§3); use `--agent-cam-opencv`, not a serial number |
+| `Timed out waiting for frame from camera` | Wrong camera device path | Check `ls /dev/video*`; verify with camera probe (§3) |
+| Camera opens but returns 0 frames | Device path correct but wrong physical camera | Swap wrist-cam and agent-cam paths; verify with probe (§3) |
 | `Failed to write 'Lock' on id_=N … no status packet` | Servo dropped off motor bus | Power-cycle arm, reseat daisy-chain cable near that motor |
-| `Device 'cuda' is not available` | Checkpoint hard-codes cuda | Set `--device mps` or leave blank (auto-selects mps on Apple Silicon) |
-| Arm lurches immediately | Out-of-distribution start pose | Start from raised, mid-workspace ready pose (§4) |
-| Arm approaches but misses grasp | Control rate / timing | Ensure `--fps 30`; for highest success rate use Linux + GPU |
+| `Permission denied: /dev/ttyACM0` | User not in `dialout` group | `sudo usermod -aG dialout $USER` then log out/in |
+| `Permission denied: /dev/video*` | User not in `video` group | `sudo usermod -aG video $USER` then log out/in |
+| Arm lurches immediately on first action | Out-of-distribution start pose | Start from raised, mid-workspace ready pose (§4) |
+| Arm approaches but misses grasp | Control rate too low | Ensure `--fps 30`; verify GPU is used (`nvidia-smi`) |
 | Warning every ~1–2 s, motion otherwise smooth | Normal periodic re-plan hitch | Expected — see §8 |
-| `EXIT=139` (segfault) after camera connect | `cv2`/`av` libavdevice conflict on macOS | Retry — it's an intermittent crash (~50% rate); keep only needed cameras attached |
-| `GOOGLE_API_KEY not set` | scene_graph needs Gemini key | `export GOOGLE_API_KEY=<key>` before running |
+| `GOOGLE_API_KEY not set` | scene_graph condition needs Gemini key | `export GOOGLE_API_KEY=<key>` before running |
